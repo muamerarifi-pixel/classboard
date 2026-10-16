@@ -1,0 +1,20 @@
+{
+  "name": "classboard",
+  "version": "4.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Classboard - offline-first teacher companion with Vercel + Postgres sync",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
