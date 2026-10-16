@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "4.9.5";
+  var VERSION = "5.0.0";
   var CFG = window.CLASSBOARD_CONFIG || {};
   var LS_KV = "cb4.kv";
   var LS_META = "cb4.meta";
@@ -27,17 +27,21 @@
     { name: "Family & Friends 1", short: "F&F 1", ed: "2nd ed.", cefr: "Pre-A1", exam: "Starters", end: 123, total: 56, units: 15 },
     { name: "Family & Friends 2", short: "F&F 2", ed: "2nd ed.", cefr: "A1", exam: "Movers", end: 123, total: 56, units: 15 },
     { name: "Family & Friends 3", short: "F&F 3", ed: "2nd ed.", cefr: "A1", exam: "Movers", end: 135, total: 56, units: 15 },
-    { name: "Family & Friends 4", short: "F&F 4", ed: "2nd ed.", cefr: "A2", exam: "Flyers", total: 56, units: 15 },
+    { name: "Family & Friends 4", short: "F&F 4", ed: "2nd ed.", cefr: "A2", exam: "Flyers", total: 72, units: 15 },
+    { name: "Family & Friends 5", short: "F&F 5", ed: "2nd ed.", cefr: "A2+", exam: "Flyers", total: 72, units: 15 },
+    { name: "Family & Friends 6", short: "F&F 6", ed: "2nd ed.", cefr: "B1", exam: "KET", total: 72, units: 15 },
     { name: "English Plus 1", short: "EP1 · 1st ed.", ed: "1st ed.", cefr: "A1–A2", end: 87, total: 72, units: 9 },
     { name: "English Plus 1 New", short: "EP1 · 2nd ed.", ed: "2nd ed.", cefr: "A1–A2", end: 91, total: 72, units: 9 },
     { name: "English Plus 2", short: "EP2 · 1st ed.", ed: "1st ed.", cefr: "A2", exam: "KET", end: 87, total: 72, units: 9 },
     { name: "English Plus 2 New", short: "EP2 · 2nd ed.", ed: "2nd ed.", cefr: "A2", exam: "KET", end: 87, total: 72, units: 9 },
     { name: "English Plus 3", short: "EP3", cefr: "A2–B1", total: 72, units: 9 },
+    { name: "English Plus 4", short: "EP4", cefr: "B2", total: 72, units: 9 },
   ];
   var BOOK_ALIAS = { "Family & Friends 3 New": "Family & Friends 3" };
   function bookInfo(name) {
     var n = BOOK_ALIAS[name] || name;
     for (var i = 0; i < BOOKS.length; i++) if (BOOKS[i].name === n) return BOOKS[i];
+    if (/ New$/.test(n)) return bookInfo(n.replace(/ New$/, "")); // a new edition of a book the app knows
     return null;
   }
   function levelOf(g) { var b = bookInfo(g.book); return g.level || (b ? b.cefr : ""); }
@@ -84,6 +88,17 @@
     { id: "ep1m", name: "EP1 (M) First", short: "EP1 M", book: "English Plus 1", total: 72, done: 23, units: 9, perWeek: 2, color: 6, schedule: [sl(2, "20:00", "21:00"), sl(4, "20:00", "21:00")] },
     { id: "ep1n", name: "EP1 2nd edition New", short: "EP1 New", book: "English Plus 1 New", total: 72, done: 4, units: 9, perWeek: 3, color: 7, schedule: [sl(1, "19:30", "20:30"), sl(3, "19:30", "20:30"), sl(5, "19:30", "20:30")] },
   ];
+  // School regulation: 3 lessons a week → the level lasts 6 months, 2 a week → 7 months.
+  // Start dates of the existing groups (from the spreadsheet); deadlines the school gave (Oct 2026).
+  // Editing a group (Ndrysho) saves its own values, which then always win over these.
+  var DEFAULT_START = { ff3a: "2026-02-19", ff3b: "2026-09-08", ffs: "2026-03-26", ff1: "2026-04-20", ff2p: "2026-04-24", ep2: "2026-01-28", ep1m: "2026-04-28", ep1n: "2026-09-07" };
+  var DEFAULT_DEADLINE = { ep1m: "2027-01-08", ep2: "2026-11-06" };
+  // Long breaks before the holiday list in the app begins (the course pauses, so the months don't run)
+  var PAST_BREAKS = [{ a: "2026-06-24", b: "2026-08-31", n: "Pushimi veror 2026" }];
+  var LONG_BREAK_DAYS = 7;
+  // Points for the class marks: ★ = 5, + = 3, − = −2 (stored as "+", "p", "-"; "+" was the old ★)
+  var MARKS = { "+": { ic: "★", pts: 5, cls: "star-plus", label: "yll" }, p: { ic: "+", pts: 3, cls: "star-p", label: "plus" }, "-": { ic: "−", pts: -2, cls: "star-minus", label: "minus" } };
+  var MARK_NEXT = { "": "+", "+": "p", p: "-", "-": "" };
   var SEED_STUDENTS = {
     ffs: ["Daris Doci", "Robin Krasniqi", "Anaja Reqica", "Nohea Lasi", "Lura Pacolli", "Aria Pacolli", "Ari Pacolli", "Kron Gashi", "Aksa Kabashi", "Alp Kadrin"],
     ff1: ["Roan Kastrati", "Renika Jahiri", "Siar Dudas", "Reis Rama", "Enur Rama", "Teo Gjaravina", "Nisa Prenqi", "Nili Demiri", "Tuan Hajiri"],
@@ -283,11 +298,18 @@
       hw: v.hw && typeof v.hw === "object" ? { p: String(v.hw.p || ""), d: String(v.hw.d || "") } : null,
       color: COLORS[(+v.color || 0) % COLORS.length], colorIdx: (+v.color || 0) % COLORS.length,
       order: v.order == null ? 99 : +v.order,
+      // School regulation (v5): start date, months for the level (0 = from lessons a week), deadline set by the school
+      start: isYmd("start" in v ? v.start : DEFAULT_START[id]) ? ("start" in v ? v.start : DEFAULT_START[id]) : "",
+      months: Math.max(0, Math.min(36, +v.months || 0)),
+      deadline: isYmd("deadline" in v ? v.deadline : DEFAULT_DEADLINE[id]) ? ("deadline" in v ? v.deadline : DEFAULT_DEADLINE[id]) : "",
+      testAt: String(v.testAt || ""),
+      tests: v.tests && typeof v.tests === "object" ? v.tests : {},
     };
   }
   // Lesson progress and page numbers sync as their own keys (g~id~done, g~id~sb, g~id~wb),
   // so editing pages on one device can never undo a lesson marked on another.
-  var GROUP_FIELDS = ["done", "sb", "wb", "hw"];
+  var GROUP_FIELDS = ["done", "sb", "wb", "hw", "tests"];
+  function isYmd(x) { return typeof x === "string" && /^\d{4}-\d\d-\d\d$/.test(x); }
   function effectiveGroup(base, fields) {
     var v = {};
     Object.keys(base.v).forEach(function (k) { v[k] = base.v[k]; });
@@ -364,10 +386,12 @@
     var ppl = seen >= planned * 0.3 && seen <= planned * 3 ? seen : planned;
     var left = g.pages - cur;
     var lessonsLeft = Math.max(0, g.total - g.done);
+    var tg = targetInfo(g), byDeadline = !!(tg && tg.slots < lessonsLeft);
+    if (byDeadline) lessonsLeft = tg.slots; // the school's deadline comes before the planned number of lessons
     var need = left <= 0 ? 0 : lessonsLeft > 0 ? left / lessonsLeft : left;
     return { cur: cur, total: g.pages, left: left, pct: Math.round(cur / g.pages * 100), ppl: ppl, observed: ppl === seen, recent: !!rp,
       rem: left <= 0 ? 0 : Math.max(1, Math.ceil(left / ppl - 0.05)),
-      lessonsLeft: lessonsLeft, planned: planned,
+      lessonsLeft: lessonsLeft, planned: planned, byDeadline: byDeadline, tg: tg,
       // pages you need per lesson to finish the book in the planned number of lessons
       need: need };
   }
@@ -391,8 +415,9 @@
   }
   function paceNote(pi) {
     if (!pi || pi.left <= 0 || !pi.observed) return "";
-    if (!pi.lessonsLeft) return '<p class="pace-warn">⚠️ Mësimet e planifikuara mbaruan, por mbeten ' + pi.left + " faqe (≈ " + pi.rem + " mësime me ritmin tuaj).</p>";
-    if (pi.ppl < pi.need * 0.9) return '<p class="pace-warn">⚠️ Ritmi juaj' + (pi.recent ? " (mësimet e fundit)" : "") + ": " + r1(pi.ppl) + " faqe/mësim — duhen " + r1(pi.need) + " për ta mbaruar librin në " + pi.lessonsLeft + " mësimet e mbetura.</p>";
+    if (!pi.lessonsLeft) return '<p class="pace-warn">⚠️ ' + (pi.tg && pi.tg.past ? "Afati (" + esc(fmtShort(pi.tg.date)) + ") kaloi" : "Mësimet e planifikuara mbaruan") + ", por mbeten " + pi.left + " faqe (≈ " + pi.rem + " mësime me ritmin tuaj).</p>";
+    var inN = pi.byDeadline ? pi.lessonsLeft + " mësimet deri në afat (" + esc(fmtShort(pi.tg.date)) + ")" : pi.lessonsLeft + " mësimet e mbetura";
+    if (pi.ppl < pi.need * 0.9) return '<p class="pace-warn">⚠️ Ritmi juaj' + (pi.recent ? " (mësimet e fundit)" : "") + ": " + r1(pi.ppl) + " faqe/mësim — duhen " + r1(pi.need) + " për ta mbaruar librin në " + inN + ".</p>";
     if (pi.ppl > pi.need * 1.15) return '<p class="pace-good">✅ Jeni përpara planit: ' + r1(pi.ppl) + " faqe/mësim (mjaftojnë " + r1(pi.need) + "). Keni kohë për aktivitete.</p>";
     return '<p class="pace-good">✅ Ritmi juaj (' + r1(pi.ppl) + " faqe/mësim) përputhet me planin.</p>";
   }
@@ -508,7 +533,7 @@
     var rem = pi ? pi.rem : Math.max(0, g.total - g.done);
     var per = lessonsPerWeek(g);
     var weeks = Math.ceil(rem / per);
-    var out = { rem: rem, per: per, weeks: weeks, date: null, pace: "done", paceLabel: "Përfunduar", pct: pi ? pi.pct : Math.round(g.done / g.total * 100), pi: pi };
+    var out = { rem: rem, per: per, weeks: weeks, date: null, pace: "done", paceLabel: "Përfunduar", pct: pi ? pi.pct : Math.round(g.done / g.total * 100), pi: pi, tg: targetInfo(g), late: false };
     if (rem <= 0) return out;
     if (g.schedule.length) {
       var d = now(); d.setHours(12, 0, 0, 0);
@@ -527,6 +552,7 @@
     } else {
       out.date = addDays(now(), weeks * 7);
     }
+    out.late = !!(out.tg && out.date && ymd(out.date) > ymd(out.tg.date));
     // With pages: compare the pages you need per lesson with the plan's pages per lesson
     if (pi && pi.left > 0) {
       // your pace (or the plan's, if there is too little history) against the pages you still need per lesson
@@ -536,12 +562,172 @@
       else { out.pace = "ease"; out.paceLabel = "Në plan"; }
       return out;
     }
-    // Without pages: same thresholds as the spreadsheet
+    // Without pages: against the deadline if there is one, otherwise the spreadsheet's thresholds
+    if (out.tg) { if (out.late) { out.pace = "speed"; out.paceLabel = "Prapa afatit"; } else { out.pace = "ease"; out.paceLabel = "Në afat"; } return out; }
     if (weeks >= 23) { out.pace = "speed"; out.paceLabel = "Përshpejto"; }
     else if (weeks <= 13) { out.pace = "ease"; out.paceLabel = "Normal"; }
     else { out.pace = "keep"; out.paceLabel = "Mbaj ritmin"; }
     return out;
   }
+
+
+  // ——— School regulation: how long a level lasts (v5) ———
+  // 3 lessons a week → 6 months, 2 a week → 7 months, counted from the group's start date.
+  // Long breaks (summer, winter — 7+ days) don't count, so the deadline moves past them.
+  // A deadline the school gave (Ndrysho → Afati) always wins.
+  function daysBetween(a, b) { return Math.round((parseYmd(b) - parseYmd(a)) / 864e5); }
+  function addMonthsYmd(s, m) {
+    var d = parseYmd(s), day = d.getDate();
+    d.setDate(1); d.setMonth(d.getMonth() + m);
+    d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0, 12).getDate()));
+    return d;
+  }
+  function longBreaks() {
+    var hs = holidays();
+    var past = PAST_BREAKS.filter(function (pb) { return !hs.some(function (h) { return h.a <= pb.b && h.b >= pb.a; }); });
+    return hs.concat(past).filter(function (h) { return daysBetween(h.a, h.b) + 1 >= LONG_BREAK_DAYS; });
+  }
+  function regMonths(g) { return g.months || (lessonsPerWeek(g) >= 3 ? 6 : 7); }
+  function regEndOf(start, months) {
+    if (!isYmd(start)) return null;
+    var br = longBreaks(), base = addMonthsYmd(start, months), end = base;
+    for (var it = 0; it < 8; it++) {
+      var e = ymd(end), extra = 0;
+      br.forEach(function (h) { var a = h.a > start ? h.a : start, b = h.b < e ? h.b : e; if (b >= a) extra += daysBetween(a, b) + 1; });
+      var nx = addDays(base, extra);
+      if (ymd(nx) === e) break;
+      end = nx;
+    }
+    return end;
+  }
+  function regEnd(g) { return regEndOf(g.start, regMonths(g)); }
+  // Scheduled lessons from today up to `end` (holidays skipped, today's lessons already marked not counted)
+  function slotsUntil(g, end) {
+    if (!g.schedule.length || !end) return 0;
+    var d = now(); d.setHours(12, 0, 0, 0);
+    var today = ymd(d), last = ymd(end), n = 0;
+    for (var i = 0; i < 1500; i++) {
+      var ds = ymd(d);
+      if (ds > last) break;
+      if (!holidayOn(ds)) g.schedule.forEach(function (s) { if (s.d === d.getDay() && !(ds === today && loggedSlot(g.id, ds, s) != null)) n++; });
+      d = addDays(d, 1);
+    }
+    return n;
+  }
+  var tgCache = {}, tgKey = "";
+  function targetInfo(g) {
+    var key = dataVer + "|" + todayStr();
+    if (key !== tgKey) { tgCache = {}; tgKey = key; }
+    if (g.id in tgCache) return tgCache[g.id];
+    var date = null, src = "";
+    if (g.deadline) { date = parseYmd(g.deadline); src = "school"; }
+    else if (g.start) { date = regEnd(g); src = "rule"; }
+    var out = date ? { date: date, src: src, months: regMonths(g), slots: slotsUntil(g, date), past: ymd(date) < todayStr() } : null;
+    tgCache[g.id] = out;
+    return out;
+  }
+  function deadlineSrc(tg, g) {
+    if (!tg) return "";
+    return tg.src === "school" ? "afat i shkollës" : tg.months + " muaj · " + (lessonsPerWeek(g) >= 3 ? "3" : lessonsPerWeek(g)) + "×/javë";
+  }
+
+  // ——— Tests (school regulation, Cambridge School 2021/22 programme table) ———
+  // F&F Starter: Summative & Skills tests after units 1, 3, 5, 7, 9 · F&F 1–3: after 3, 6, 9, 12, 15 · F&F 4–6: after 3, 6, 9, 12
+  // English Plus: End-of-term test 1 in the middle of the course, test 2 at the end (Standard A; A and B when the class is big)
+  // Any other book: type the units in Ndrysho → "Testet pas unitit".
+  function maxUnitNo(g) {
+    var m = 0;
+    contentsOf(g.book).forEach(function (r) { if (/^\d+$/.test(r.u)) m = Math.max(m, +r.u); });
+    return m;
+  }
+  function testRule(g) {
+    var custom = (String(g.testAt || "").match(/\d+/g) || []).map(Number).filter(function (x) { return x > 0 && x < 100; });
+    if (custom.length) return { kind: "custom", units: custom.sort(function (a, b) { return a - b; }) };
+    var b = BOOK_ALIAS[g.book] || g.book || "", m;
+    if (/family\s*(&|and)\s*friends\s*starter/i.test(b)) return { kind: "ff", units: [1, 3, 5, 7, 9] };
+    if ((m = b.match(/family\s*(&|and)\s*friends\s*(\d)/i))) return { kind: "ff", units: +m[2] <= 3 ? [3, 6, 9, 12, 15] : [3, 6, 9, 12] };
+    if (/english\s*plus/i.test(b)) { var last = maxUnitNo(g) || 8; return { kind: "ep", units: [Math.ceil(last / 2), last] }; }
+    return null;
+  }
+  // The SB pages of unit u (to the page before the next numbered unit, so Review / Values pages belong to it)
+  function unitSpan(g, u) {
+    var rows = contentsOf(g.book), i, from = null, to = null;
+    for (i = 0; i < rows.length; i++) if (rows[i].u === String(u)) { from = rows[i].from; break; }
+    if (from == null) return null;
+    for (var j = i + 1; j < rows.length; j++) if (/^\d+$/.test(rows[j].u) && +rows[j].u > u) { to = rows[j].from - 1; break; }
+    if (to == null) to = g.pages || rows[rows.length - 1].to;
+    return { from: from, to: Math.min(to, 99998) };
+  }
+  function testsOf(g) {
+    var rule = testRule(g);
+    if (!rule) return [];
+    var cur = lastNum(g.sb), nStu = studentsOf(g.id).length, per = g.total / Math.max(1, rule.kind === "ep" ? (maxUnitNo(g) || 8) + 1 : g.units);
+    var list = rule.units.map(function (u, i) {
+      var t = { u: u, i: i, key: String(u), done: g.tests[String(u)] || "" };
+      if (rule.kind === "ep") {
+        t.title = "End-of-term Test " + (i + 1);
+        t.sub = (i === 0 ? "mesi i kursit" : "fundi i kursit") + " · pas Unit " + u;
+        t.tip = (nStu > 10 ? "Standard A dhe B (klasë e madhe)" : "Standard A") + " · audio endofterm" + (i + 1) + ".mp3";
+      } else if (rule.kind === "ff") {
+        t.title = "Summative & Skills Test " + (i + 1);
+        t.sub = "pas Unit " + u;
+      } else { t.title = "Testi " + (i + 1); t.sub = "pas Unit " + u; }
+      var sp = unitSpan(g, u);
+      if (sp && cur != null) { t.state = cur >= sp.to ? "due" : cur + 1 >= sp.from ? "soon" : "later"; t.page = sp.to; }
+      else { // no contents / no page yet: from the lesson number
+        var endL = Math.min(g.total, Math.round((rule.kind === "ep" ? u + 1 : u) * per));
+        t.state = g.done >= endL ? "due" : g.done >= endL - Math.ceil(per) ? "soon" : "later"; t.lesson = endL;
+      }
+      if (t.done) t.state = "done";
+      return t;
+    });
+    // Only the most recent test that's due is "now"; older undone ones are just listed
+    var lastDue = -1;
+    list.forEach(function (t, i) { if (t.state === "due") lastDue = i; });
+    list.forEach(function (t, i) { if (t.state === "due" && i !== lastDue) t.state = "missed"; });
+    return list;
+  }
+  function testNow(g) { return testsOf(g).filter(function (t) { return t.state === "due" || t.state === "soon"; })[0] || null; }
+  function testLine(g) {
+    var t = testNow(g);
+    if (!t) return "";
+    if (t.state === "due") return '<div class="test-line due">📝 Koha për testin: <b>' + esc(t.title) + "</b> <span class=\"muted small\">(" + esc(t.sub) + ")</span>" +
+      ' <button type="button" class="btn btn-sm btn-soft" data-a="testDone" data-g="' + esc(g.id) + '" data-u="' + esc(t.key) + '">✓ U bë</button></div>';
+    return '<div class="test-line">📝 Testi i radhës: <b>' + esc(t.title) + "</b> — " + esc(t.sub) + (t.page ? " (pas SB f. " + t.page + ")" : "") + "</div>";
+  }
+  function testsCard(g) {
+    var list = testsOf(g), rule = testRule(g);
+    var h = '<div class="card"><div class="row between"><h2 style="margin:0">📝 Testet</h2><span class="muted small">' + (rule ? (rule.kind === "custom" ? "të caktuara nga ju" : "sipas rregullores") : "") + "</span></div>";
+    if (!list.length) return h + '<p class="small muted" style="margin-top:8px">Për këtë libër nuk ka rregull. Shkruani unitet te “✎ Ndrysho” → “Testet pas unitit” (p.sh. 3, 6, 9).</p></div>';
+    var LBL = { done: "✓ u bë", due: "📝 tani", missed: "⚠️ pa shënuar", soon: "së shpejti", later: "" };
+    h += '<ul class="tests">' + list.map(function (t) {
+      return '<li class="t-' + t.state + '"><div class="grow"><b>' + esc(t.title) + "</b><small>" + esc(t.sub) + (t.page ? " · SB f. " + t.page : t.lesson ? " · rreth mësimit " + t.lesson : "") + (t.done ? " · " + esc(fmtShort(parseYmd(t.done))) : "") + (t.tip && t.state !== "done" ? "<br>" + esc(t.tip) : "") + "</small></div>" +
+        (LBL[t.state] ? '<span class="chip' + (t.state === "due" ? " chip-now" : t.state === "done" ? " chip-ok" : "") + '">' + LBL[t.state] + "</span>" : "") +
+        '<button type="button" class="btn btn-sm ' + (t.done ? "btn-ghost" : "btn-soft") + '" data-a="testDone" data-g="' + esc(g.id) + '" data-u="' + esc(t.key) + '">' + (t.done ? "↺" : "✓") + "</button></li>";
+    }).join("") + "</ul>";
+    if (rule.kind !== "custom") h += '<p class="muted tiny" style="margin-top:6px">Opsionale (formative): ' + (rule.kind === "ep" ? "Unit Standard Tests pas çdo uniti." : "Unit Tests pas çdo uniti.") + "</p>";
+    return h + "</div>";
+  }
+
+  // ——— Class marks: ★ 5 · + 3 · − −2 ———
+  function studentStats(sid) {
+    var D = data(), o = { P: 0, L: 0, A: 0, Y: 0, N: 0, S: 0, Pl: 0, M: 0, pts: 0, last: [] };
+    Object.keys(D.att).forEach(function (d) { var a = D.att[d][sid]; if (a === "P") o.P++; else if (a === "L") o.L++; else if (a === "A") o.A++; });
+    Object.keys(D.hw).forEach(function (d) { var w = D.hw[d][sid]; if (w === "Y") o.Y++; else if (w === "N") o.N++; });
+    Object.keys(D.star).sort().forEach(function (d) {
+      var m = MARKS[D.star[d][sid]];
+      if (!m) return;
+      if (m.pts === 5) o.S++; else if (m.pts === 3) o.Pl++; else o.M++;
+      o.pts += m.pts; o.last.push({ d: d, v: D.star[d][sid] });
+    });
+    var att = o.P + o.L + o.A, hw = o.Y + o.N;
+    o.attPct = att ? Math.round((o.P + o.L) / att * 100) : null;
+    o.hwPct = hw ? Math.round(o.Y / hw * 100) : null;
+    return o;
+  }
+  function groupStats(gid) { var out = {}; studentsOf(gid).forEach(function (s) { out[s.id] = studentStats(s.id); }); return out; }
+  function markBtn(v) { var m = MARKS[v]; return m ? m.ic : "☆"; }
+  function marksText(o) { return (o.S || o.Pl || o.M) ? [o.S ? "★" + o.S : "", o.Pl ? "+" + o.Pl : "", o.M ? "−" + o.M : ""].filter(Boolean).join(" ") + " = " + o.pts + " p" : "—"; }
 
   // ——————————————————— Sync (your Vercel project: /api/sync + Postgres) ———————————————————
   // Local-first: every change is saved on the device immediately, then sent to the server.
@@ -893,7 +1079,7 @@
         (logged != null
           ? '<button type="button" class="btn btn-soft" data-a="editDone" data-g="' + esc(g.id) + '" data-slot="' + esc(slotKey(s)) + '">✎ Ndrysho</button>'
           : '<button type="button" class="btn btn-ok" data-a="markDone" data-g="' + esc(g.id) + '" data-slot="' + esc(slotKey(s)) + '"' + (complete ? " disabled" : "") + ">✓ U krye</button>") +
-        '<button type="button" class="btn" data-a="openClass" data-g="' + esc(g.id) + '" data-date="' + date + '">👥 Klasa' + (nStu ? " " + (marked ? marked + "/" : "") + nStu : "") + "</button>" +
+        '<button type="button" class="btn" data-a="openClass" data-g="' + esc(g.id) + '" data-date="' + date + '">👥 ' + (nStu ? (marked ? marked + "/" + nStu + " shënuar" : nStu + " nxënës") : "Prezenca") + "</button>" +
         '<button type="button" class="icon-btn" data-a="openGroup" data-g="' + esc(g.id) + '" aria-label="Hap grupin"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>' +
         "</div></div></article>";
     });
@@ -917,6 +1103,7 @@
       if (pl.t) h += '<div class="target-line">🎯 Sot: <b>SB f. ' + rangeText(pl.t.a, pl.t.b) + "</b>" + (pl.hw ? " · 📓 DSh: WB f. " + esc(pl.hw) : "") + "</div>";
       else if (lastNum(g.sb) == null) h += '<div class="plan-line muted small">Shtypni “✓ U krye” dhe shkruani faqen ku ndaluat — pastaj app-i i llogarit vetë faqet.</div>';
       if (hwPending(g, date)) h += '<div class="plan-line">✔️ Kontrollo detyrën: <b>WB f. ' + esc(hwPending(g, date)) + "</b></div>";
+      h += testLine(g);
     } else {
       var rec = (data().pg[g.id] || []).filter(function (r) { return r.date === date; })[0];
       h += '<div class="lesson-next">Mësimi ' + logged + " u krye" + (rec && rec.t != null ? " · SB deri f. " + rec.t : "") + "</div>";
@@ -960,6 +1147,8 @@
         '<div class="muted small">' + esc(bookText(g.book)) + " · " + n + " nxënës · " + esc(scheduleText(g)) + "</div>" +
         '<div class="bar"><i style="width:' + f.pct + '%"></i></div>' +
         '<div class="row between small"><span>' + (f.pi ? "SB <b>" + f.pi.cur + "</b>/" + f.pi.total + " f. · " : "<b>" + g.done + "</b>/" + g.total + " · ") + f.rem + " mësime mbetur</span><span class=\"muted\">" + (f.rem ? "Mbaron ~ " + fmtShort(f.date) : "Përfunduar ✓") + "</span></div>" +
+        (f.tg ? '<div class="small deadline' + (f.late ? " late" : "") + '">🎯 Afati: <b>' + esc(fmtShort(f.tg.date)) + "</b> <span class=\"muted\">(" + esc(deadlineSrc(f.tg, g)) + ")</span>" + (f.rem && !f.tg.past ? " · " + f.tg.slots + " mësime deri atëherë" : "") + (f.late ? " · ⚠️ vonohet" : "") + "</div>" : "") +
+        (testNow(g) ? '<div class="small">📝 ' + esc(testNow(g).title) + (testNow(g).state === "due" ? " — tani" : " — së shpejti") + "</div>" : "") +
         "</button>";
     });
     h += "</div>";
@@ -1001,7 +1190,9 @@
       '<div class="fact"><span>Mbeten' + (pi ? " (me ritmin tuaj)" : "") + '</span><b>' + f.rem + " mësime</b></div>" +
       (pi && pi.left > 0 ? '<div class="fact"><span>Duhen</span><b>≈ ' + r1(pi.need) + " faqe/mësim</b></div>" : '<div class="fact"><span>Javë</span><b>' + f.weeks + " (" + f.per + "/javë)</b></div>") +
       '<div class="fact"><span>Mbaron rreth</span><b>' + (f.rem ? fmtShort(f.date) : "Përfunduar") + "</b></div>" +
-      "</div>";
+      (f.tg ? '<div class="fact' + (f.late ? " fact-late" : "") + '"><span>🎯 Afati · ' + esc(deadlineSrc(f.tg, g)) + '</span><b>' + esc(fmtShort(f.tg.date)) + "</b></div>" +
+        '<div class="fact"><span>Mësime deri në afat</span><b>' + (f.tg.past ? "afati kaloi" : f.tg.slots) + "</b></div>" : '<div class="fact"><span>🎯 Afati</span><b class="small"><button type="button" class="btn btn-sm btn-soft" data-a="editGroup" data-g="' + esc(g.id) + '">Vendos datën e fillimit</button></b></div>') +
+      "</div>" + (f.late && f.rem ? '<p class="pace-warn">⚠️ Me ritmin e tanishëm mbaron rreth ' + esc(fmtShort(f.date)) + ", pas afatit " + esc(fmtShort(f.tg.date)) + ".</p>" : "");
     h += '<details class="fix"><summary>Korrigjo faqet ose numrin e mësimeve</summary>' +
       '<div class="pages"><label><span>SB</span><input data-in="page" data-g="' + esc(g.id) + '" data-f="sb" value="' + esc(g.sb) + '" placeholder="faqja" inputmode="numeric"></label>' +
       '<label><span>WB</span><input data-in="page" data-g="' + esc(g.id) + '" data-f="wb" value="' + esc(g.wb) + '" placeholder="faqja"></label></div>' +
@@ -1009,6 +1200,8 @@
       '<div class="num"><b>' + g.done + '</b><span> / ' + g.total + '</span><div class="muted tiny">mësime të kryera</div></div>' +
       '<button type="button" data-a="step" data-g="' + esc(g.id) + '" data-d="1" aria-label="Plus">+</button></div></details>';
     h += '<p class="small" style="margin-top:8px">📓 ' + (g.hw ? (g.hw.p ? "Detyra e fundit: <b>WB f. " + esc(g.hw.p) + "</b> · " + esc(fmtDayDate(g.hw.d)) : "Mësimi i fundit: pa detyrë · " + esc(fmtDayDate(g.hw.d))) : '<span class="muted">Detyra sugjerohet vetë pas “✓ U krye”.</span>') + "</p></div>";
+
+    h += testsCard(g);
 
     // Units of the book with where the class is
     var cts = contentsOf(g.book), curP = lastNum(g.sb);
@@ -1031,11 +1224,11 @@
       '<div class="add-row" style="margin-top:10px"><textarea class="input" rows="1" id="add-stu" data-enter="addStudents" data-g="' + esc(g.id) + '" placeholder="Shto nxënës… (disa emra? një për rresht)"></textarea>' +
       '<button type="button" class="btn btn-primary" data-a="addStudents" data-g="' + esc(g.id) + '">Shto</button></div>';
     if (stu.length) {
-      var absences = absenceCounts(), hwMiss = hwStreaks();
+      var absences = absenceCounts(), hwMiss = hwStreaks(), gst = groupStats(g.id);
       h += '<ul class="students">' + stu.map(function (s, i) {
-        var a = absences[s.id] || 0, miss = hwMiss[s.id] || 0;
+        var a = absences[s.id] || 0, miss = hwMiss[s.id] || 0, o = gst[s.id];
         return '<li><span class="num-badge">' + (i + 1) + '</span><button type="button" class="stu-name" data-a="openStudent" data-s="' + esc(s.id) + '"><b>' + esc(s.name) + "</b>" +
-          (a || s.note || miss >= 3 ? "<small>" + [a ? a + " mungesa" : "", miss >= 3 ? "⚠️ " + miss + " herë radhazi pa detyrë" : "", s.note ? "📝 " + esc(s.note.slice(0, 40)) : ""].filter(Boolean).join(" · ") + "</small>" : "") + "</button>" +
+          (a || s.note || miss >= 3 || o.pts ? "<small>" + [o.pts ? "⭐ " + o.pts + " pikë" : "", a ? a + " mungesa" : "", miss >= 3 ? "⚠️ " + miss + " herë radhazi pa detyrë" : "", s.note ? "📝 " + esc(s.note.slice(0, 40)) : ""].filter(Boolean).join(" · ") + "</small>" : "") + "</button>" +
           '<button type="button" class="icon-btn" data-a="delStudent" data-s="' + esc(s.id) + '" aria-label="Fshi ' + esc(s.name) + '"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button></li>';
       }).join("") + "</ul>";
     } else {
@@ -1071,13 +1264,17 @@
 
     var h = '<div class="stack">';
     h += weekCard();
+    var tn = data().groups.map(function (g) { return { g: g, t: testNow(g) }; }).filter(function (x) { return x.t; });
+    if (tn.length) h += '<div class="card"><h2>📝 Testet e radhës</h2>' + tn.map(function (x) {
+      return '<button type="button" class="wk-row" data-a="openGroup" data-g="' + esc(x.g.id) + '" style="--gc:' + x.g.color + '"><span class="gdot"></span>' + gi(x.g) + "<b>" + esc(x.g.short) + "</b>&nbsp;" + esc(x.t.title) + '<span class="wk-s ' + (x.t.state === "due" ? "miss" : "") + '">' + (x.t.state === "due" ? "tani" : "së shpejti") + "</span></button>";
+    }).join("") + "</div>";
     h += '<div><h1 style="font-size:1.4rem">Plani deri në fund</h1><p class="muted small">Llogaritet nga sot sipas orarit të çdo grupi. Ndryshon vetë kur shënoni mësimet.</p></div>';
     h += '<div class="summary"><div class="kpi"><b>' + T.pct + '%</b><span>Progresi total</span></div><div class="kpi"><b>' + (nearest ? esc(nearest.g.short) : "—") + "</b><span>Mbaron i pari" + (nearest ? " · " + fmtShort(nearest.f.date) : "") + '</span></div><div class="kpi"><b>' + (dates.length ? fmtShort(dates[dates.length - 1]) : "—") + "</b><span>Mbaron i fundit</span></div></div>";
     // Table (desktop)
-    h += '<div class="card plan-table-wrap" style="overflow-x:auto"><table class="plan-table"><thead><tr><th>Grupi</th><th>Libri</th><th class="n">Totali</th><th class="n">Kryer</th><th class="n">Progresi</th><th class="n">Mbetur</th><th class="n">/Javë</th><th class="n">Javë</th><th>Mbaron</th><th>Ritmi</th></tr></thead><tbody>';
+    h += '<div class="card plan-table-wrap" style="overflow-x:auto"><table class="plan-table"><thead><tr><th>Grupi</th><th>Libri</th><th class="n">Totali</th><th class="n">Kryer</th><th class="n">Progresi</th><th class="n">Mbetur</th><th class="n">/Javë</th><th class="n">Javë</th><th>Mbaron</th><th>Afati</th><th>Ritmi</th></tr></thead><tbody>';
     gs.forEach(function (x) {
       var g = x.g, f = x.f;
-      h += '<tr data-a="openGroup" data-g="' + esc(g.id) + '" style="--gc:' + g.color + '"><td><span class="gdot"></span>' + gi(g) + '<b>' + esc(g.name) + "</b> " + levelChip(g) + "</td><td>" + esc(bookText(g.book)) + '</td><td class="n">' + g.total + '</td><td class="n">' + g.done + '</td><td class="n">' + f.pct + "%" + (f.pi ? ' <span class="muted tiny">f.' + f.pi.cur + "/" + f.pi.total + "</span>" : "") + '</td><td class="n">' + f.rem + '</td><td class="n">' + f.per + '</td><td class="n">' + f.weeks + "</td><td>" + (f.rem ? fmtShort(f.date) : "—") + '</td><td><span class="chip pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></td></tr>";
+      h += '<tr data-a="openGroup" data-g="' + esc(g.id) + '" style="--gc:' + g.color + '"><td><span class="gdot"></span>' + gi(g) + '<b>' + esc(g.name) + "</b> " + levelChip(g) + "</td><td>" + esc(bookText(g.book)) + '</td><td class="n">' + g.total + '</td><td class="n">' + g.done + '</td><td class="n">' + f.pct + "%" + (f.pi ? ' <span class="muted tiny">f.' + f.pi.cur + "/" + f.pi.total + "</span>" : "") + '</td><td class="n">' + f.rem + '</td><td class="n">' + f.per + '</td><td class="n">' + f.weeks + "</td><td>" + (f.rem ? fmtShort(f.date) : "—") + "</td><td" + (f.late ? ' class="late"' : "") + ">" + (f.tg ? esc(fmtShort(f.tg.date)) + (f.late ? " ⚠️" : "") : "—") + '</td><td><span class="chip pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></td></tr>";
     });
     h += "</tbody></table></div>";
     // Cards (mobile)
@@ -1090,10 +1287,11 @@
         '<div class="facts" style="grid-template-columns:repeat(3,1fr);margin-top:6px">' +
         '<div class="fact"><span>Mbetur</span><b>' + f.rem + "</b></div>" +
         '<div class="fact"><span>Javë</span><b>' + f.weeks + "</b></div>" +
-        '<div class="fact"><span>Mbaron</span><b>' + (f.rem ? fmtShort(f.date) : "✓") + "</b></div></div></button>";
+        '<div class="fact"><span>Mbaron</span><b>' + (f.rem ? fmtShort(f.date) : "✓") + "</b></div></div>" +
+        (f.tg ? '<div class="small deadline' + (f.late ? " late" : "") + '" style="margin-top:6px">🎯 Afati ' + esc(fmtShort(f.tg.date)) + (f.late ? " · ⚠️ vonohet" : " · në rregull") + "</div>" : "") + "</button>";
     });
     h += "</div>";
-    h += '<p class="muted tiny">Në plan = faqet për mësim përputhen me planin · Prapa planit = duhen më shumë faqe për mësim · Përpara planit = keni kohë për aktivitete. Data e përfundimit llogaritet me ritmin tuaj të fundit, pa pushimet.</p>';
+    h += '<p class="muted tiny">Në plan = faqet për mësim përputhen me planin · Prapa planit = duhen më shumë faqe për mësim · Përpara planit = keni kohë për aktivitete. Data e përfundimit llogaritet me ritmin tuaj të fundit, pa pushimet. Afati = rregullorja e shkollës (3×/javë → 6 muaj, 2×/javë → 7 muaj nga fillimi, pa pushimet e gjata) ose data që jep shkolla.</p>';
     h += '<div class="row wrap"><button type="button" class="btn btn-sm" data-a="exportCsv">⬇ Shkarko CSV</button><button type="button" class="btn btn-sm" data-a="print">🖨 Printo</button></div>';
     h += "</div>";
     return h;
@@ -1610,12 +1808,11 @@
     var f = forecast(g), pi = pageInfo(g), wi = wbInfo(g), stu = studentsOf(gid);
     var att = data().att, hw = data().hw, star = data().star;
     var rows = stu.map(function (s, i) {
-      var P = 0, L = 0, Ab = 0, Y = 0, N = 0, plus = 0, minus = 0;
+      var P = 0, L = 0, Ab = 0, Y = 0, N = 0, so = studentStats(s.id);
       Object.keys(att).forEach(function (d) { var a = att[d][s.id]; if (a === "P") P++; else if (a === "L") L++; else if (a === "A") Ab++; });
       Object.keys(hw).forEach(function (d) { var w = hw[d][s.id]; if (w === "Y") Y++; else if (w === "N") N++; });
-      Object.keys(star).forEach(function (d) { var p = star[d][s.id]; if (p === "+") plus++; else if (p === "-") minus++; });
       var tot = P + L + Ab;
-      return "<tr><td>" + (i + 1) + "</td><td><b>" + esc(s.name) + "</b></td><td>" + P + "</td><td>" + L + "</td><td>" + Ab + "</td><td>" + (tot ? Math.round((P + L) / tot * 100) + "%" : "—") + "</td><td>" + Y + "</td><td>" + N + "</td><td>" + (plus || minus ? "★" + plus + (minus ? " / −" + minus : "") : "—") + "</td><td>" + esc(s.note || "") + "</td></tr>";
+      return "<tr><td>" + (i + 1) + "</td><td><b>" + esc(s.name) + "</b></td><td>" + P + "</td><td>" + L + "</td><td>" + Ab + "</td><td>" + (tot ? Math.round((P + L) / tot * 100) + "%" : "—") + "</td><td>" + Y + "</td><td>" + N + "</td><td>" + esc(marksText(so)) + "</td><td>" + esc(s.note || "") + "</td></tr>";
     }).join("");
     var hRep = '<div class="rep"><div class="rep-head"><div><div class="rep-kicker">Cambridge School · Prof. Muhamer</div><h1>Raport — ' + esc(g.name) + "</h1><div>" + esc(bookText(g.book)) + (levelText(g) ? " · Niveli " + esc(levelText(g)) : "") + "</div></div><div class=\"rep-date\">" + esc(fmtLong(now())) + "</div></div>" +
       '<div class="rep-kpis">' +
@@ -1625,7 +1822,7 @@
       "<div><span>Mbaron rreth</span><b>" + (f.rem ? esc(fmtShort(f.date)) : "Përfunduar") + "</b></div>" +
       (pi && pi.left > 0 ? "<div><span>Objektivi</span><b>≈ " + r1(pi.need) + " faqe / mësim</b></div>" : "") +
       "<div><span>Nxënës</span><b>" + stu.length + "</b></div></div>" +
-      '<table class="rep-t"><thead><tr><th>#</th><th>Nxënësi</th><th>Prezent</th><th>Vonë</th><th>Mungesa</th><th>Prezenca</th><th>Detyra ✓</th><th>Detyra ✗</th><th>Aktivizimi</th><th>Shënime</th></tr></thead><tbody>' + rows + "</tbody></table>" +
+      '<table class="rep-t"><thead><tr><th>#</th><th>Nxënësi</th><th>Prezent</th><th>Vonë</th><th>Mungesa</th><th>Prezenca</th><th>Detyra ✓</th><th>Detyra ✗</th><th>Pikët (★5 +3 −2)</th><th>Shënime</th></tr></thead><tbody>' + rows + "</tbody></table>" +
       '<p class="rep-foot">Gjeneruar nga Classboard · ' + esc(fmtLong(now())) + "</p></div>";
     var root = $("#print-root");
     if (!root) { root = document.createElement("div"); root.id = "print-root"; document.body.appendChild(root); }
@@ -1735,7 +1932,9 @@
 
     // Holidays
     var hl = holidays(), hf = ui.holForm || {};
-    h += '<div class="card"><h2>🏖️ Pushimet dhe ditët pa mësim</h2><p class="small muted">Në këto ditë nuk shfaqen mësime dhe datat e përfundimit llogariten pa to.</p>' +
+    var holEnd = hl.reduce(function (m, x) { return x.b > m ? x.b : m; }, "");
+    h += '<div class="card"><h2>🏖️ Pushimet dhe ditët pa mësim</h2><p class="small muted">Në këto ditë nuk shfaqen mësime dhe datat e përfundimit llogariten pa to. Pushimet e gjata (7+ ditë) shtyjnë edhe afatin e nivelit.</p>' +
+      (!holEnd || holEnd < ymd(addDays(now(), 60)) ? '<p class="pace-warn">📅 Kalendari i pushimeve mbaron ' + (holEnd ? "më " + esc(fmtShort(parseYmd(holEnd))) : "") + ". Shtoni pushimet e vitit të ri shkollor që datat dhe afatet të dalin saktë.</p>" : "") +
       (hl.length ? '<ul class="hol-list">' + hl.map(function (x, i) {
         return '<li><div><b>' + esc(x.n) + '</b><small>' + esc(fmtShort(parseYmd(x.a))) + (x.b > x.a ? " – " + esc(fmtShort(parseYmd(x.b))) : "") + '</small></div><button type="button" class="icon-btn" data-a="delHoliday" data-i="' + i + '" aria-label="Hiq"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button></li>';
       }).join("") + "</ul>" : '<p class="small muted" style="margin-top:8px">Nuk ka pushime të shënuara.</p>') +
@@ -1836,7 +2035,7 @@
     var att = data().att[date] || {}, hw = data().hw[date] || {}, star = data().star[date] || {};
     var P = 0, L = 0, A = 0;
     stu.forEach(function (st) { var a = att[st.id]; if (a === "P") P++; else if (a === "L") L++; else if (a === "A") A++; });
-    var h = sheetHead(esc(groupIcon(g) + " " + g.short) + " · Klasa", esc(fmtDayDate(date)));
+    var h = sheetHead(esc(groupIcon(g) + " " + g.short) + " · Prezenca", esc(fmtDayDate(date)) + " · " + stu.length + " nxënës");
     h += '<div class="sheet-body">';
     h += '<div class="class-tools"><div class="daynav"><button type="button" class="icon-btn" data-a="classDay" data-d="-1" aria-label="Dita e kaluar"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>' +
       '<button type="button" class="icon-btn" data-a="classDay" data-d="1" aria-label="Dita tjetër"' + (date >= todayStr() ? " disabled" : "") + '><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button></div>' +
@@ -1845,18 +2044,18 @@
     if (chk) h += '<div class="note" style="margin-bottom:8px">📓 Kontrolloni detyrën: <b>WB f. ' + esc(chk) + "</b></div>";
     h += '<div class="class-btns"><button type="button" class="btn btn-soft btn-sm" data-a="allPresent">✓ Të gjithë prezent</button><button type="button" class="btn btn-soft btn-sm" data-a="allHw">📓 Të gjithë e bënë detyrën</button></div>' +
       '<p class="muted tiny" style="margin:0 0 8px">Pastaj prekni vetëm ata që mungojnë ose s\'e bënë detyrën.</p>';
-    var streaks = hwStreaks();
+    var streaks = hwStreaks(), gst = groupStats(g.id);
     if (!stu.length) h += '<p class="muted center" style="padding:20px">Nuk ka nxënës në këtë grup.</p>';
     stu.forEach(function (st) {
       var a = att[st.id] || "", w = hw[st.id] || "", p = star[st.id] || "";
       h += '<div class="crow">' +
         '<button type="button" class="att' + (a ? " att-" + a : "") + '" data-a="att" data-s="' + esc(st.id) + '" aria-label="Prezenca">' + ({ P: "✓", L: "⏰", A: "✗" }[a] || "·") + "</button>" +
-        '<span class="nm">' + esc(st.name) + ((streaks[st.id] || 0) >= 3 ? ' <span title="' + streaks[st.id] + ' herë radhazi pa detyrë">⚠️</span>' : "") + "</span>" +
+        '<button type="button" class="nm" data-a="openStudent" data-s="' + esc(st.id) + '">' + esc(st.name) + ((streaks[st.id] || 0) >= 3 ? ' <span title="' + streaks[st.id] + ' herë radhazi pa detyrë">⚠️</span>' : "") + (gst[st.id].pts ? ' <small class="pts">' + gst[st.id].pts + " p</small>" : "") + "</button>" +
         '<button type="button" class="hw' + (w ? " hw-" + w : "") + '" data-a="hw" data-s="' + esc(st.id) + '" aria-label="Detyra">' + ({ Y: "DSh ✓", N: "DSh ✗" }[w] || "DSh") + "</button>" +
-        '<button type="button" class="star' + (p === "+" ? " star-plus" : p === "-" ? " star-minus" : "") + '" data-a="star" data-s="' + esc(st.id) + '" aria-label="Aktivizimi">' + (p === "-" ? "−" : "★") + "</button>" +
+        '<button type="button" class="star' + (MARKS[p] ? " " + MARKS[p].cls : "") + '" data-a="star" data-s="' + esc(st.id) + '" aria-label="Pikët: ' + (MARKS[p] ? MARKS[p].label : "pa shenjë") + '">' + markBtn(p) + "</button>" +
         "</div>";
     });
-    h += '<div class="legend"><span>Prekni: ✓ prezent → ⏰ vonë → ✗ mungon</span><span>DSh = detyra e shtëpisë</span><span>★ aktiv · − jo aktiv</span></div>';
+    h += '<div class="legend"><span>Prekni: ✓ prezent → ⏰ vonë → ✗ mungon</span><span>DSh = detyra e shtëpisë</span><span>Pikët: ☆ → ★ = 5 → + = 3 → − = −2</span></div>';
     h += "</div>";
     h += '<div class="sheet-foot"><button type="button" class="btn btn-primary" data-a="closeSheet">Gati</button></div>';
     return h;
@@ -1883,10 +2082,21 @@
         '<button type="button" class="icon-btn" data-a="rmSlot" data-i="' + i + '" aria-label="Hiq"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>';
     });
     h += '<button type="button" class="btn btn-sm btn-soft" data-a="addSlot">+ Shto orë</button></div>';
-    h += '<details class="field more-opt"' + (f.pages || f.wbPages || f.level ? " open" : "") + '><summary>Më shumë opsione</summary>' +
+    // School regulation: 3×/week → 6 months, 2×/week → 7 months (long breaks don't count)
+    var nSl = f.schedule.filter(function (x) { return x.s && x.e; }).length || +f.perWeek || 2, autoM = nSl >= 3 ? 6 : 7;
+    var fm = Math.max(0, parseInt(f.months, 10) || 0) || autoM;
+    var prev = isYmd(f.deadline) ? parseYmd(f.deadline) : regEndOf(f.start, fm);
+    h += '<div class="field reg-box"><span>🎯 Kohëzgjatja e nivelit (rregullorja e shkollës)</span>' +
+      '<div class="grid2"><label class="field"><span>Data e fillimit</span><input class="input" type="date" data-gf="start" value="' + esc(f.start || "") + '"></label>' +
+      '<label class="field"><span>Muaj</span><input class="input" type="number" min="1" max="36" inputmode="numeric" data-gf="months" value="' + esc(f.months || "") + '" placeholder="automatikisht: ' + autoM + '"></label></div>' +
+      '<label class="field"><span>Afati i caktuar nga shkolla (opsionale)</span><input class="input" type="date" data-gf="deadline" value="' + esc(f.deadline || "") + '"><small class="muted">Nëse shkolla ju jep një datë, kjo ka përparësi.</small></label>' +
+      '<p class="small">' + (prev ? "→ Afati: <b>" + esc(fmtLong(prev)) + "</b> " + (isYmd(f.deadline) ? "(nga shkolla)" : "(" + fm + " muaj · " + nSl + "×/javë, pa pushimet e gjata)") : '<span class="muted">Zgjidhni datën e fillimit — afati llogaritet vetë: ' + autoM + " muaj për " + nSl + "×/javë.</span>") + "</p></div>";
+    h += '<details class="field more-opt"' + (f.pages || f.wbPages || f.level || f.testAt ? " open" : "") + '><summary>Më shumë opsione</summary>' +
       '<label class="field"><span>Faqja e fundit e kursit në SB</span><input class="input" type="number" min="0" inputmode="numeric" data-gf="pages" value="' + esc(f.pages || "") + '" placeholder="' + (bi && bi.end ? "automatikisht: " + bi.end : "p.sh. 120") + '"></label>' +
       '<label class="field"><span>Faqe gjithsej në Workbook (opsionale)</span><input class="input" type="number" min="0" inputmode="numeric" data-gf="wbPages" value="' + esc(f.wbPages || "") + '" placeholder="nuk nevojitet"></label>' +
-      '<label class="field"><span>Niveli (CEFR)</span><input class="input" data-gf="level" value="' + esc(f.level || "") + '" placeholder="' + (bi ? "automatikisht: " + esc(bi.cefr) : "p.sh. A1") + '"></label></details>';
+      '<label class="field"><span>Niveli (CEFR)</span><input class="input" data-gf="level" value="' + esc(f.level || "") + '" placeholder="' + (bi ? "automatikisht: " + esc(bi.cefr) : "p.sh. A1") + '"></label>' +
+      (bi ? "" : '<label class="field"><span>Unite në libër</span><input class="input" type="number" min="1" inputmode="numeric" data-gf="units" value="' + esc(f.units || "") + '" placeholder="15"></label>') +
+      '<label class="field"><span>Testet pas unitit (opsionale)</span><input class="input" data-gf="testAt" value="' + esc(f.testAt || "") + '" placeholder="' + esc(testRule({ book: f.book, testAt: "", units: f.units, pages: 0 }) ? "automatikisht: " + testRule({ book: f.book, testAt: "", units: f.units, pages: 0 }).units.join(", ") : "p.sh. 3, 6, 9, 12") + '"><small class="muted">Bosh = sipas rregullores për librin.</small></label></details>';
     var takenI = usedIcons(s.g);
     h += '<div class="field"><span>Ikona e grupit</span><div class="icons">' + ICONS.map(function (c) {
       return '<button type="button" class="' + (f.icon === c ? "on" : "") + (takenI[c] && f.icon !== c ? " taken" : "") + '" data-a="pickIcon" data-v="' + esc(c) + '" aria-label="Ikona ' + esc(c) + '">' + esc(c) + "</button>";
@@ -1903,22 +2113,41 @@
   function sheetStudent(s) {
     var st = data().sById[s.s];
     if (!st) return "";
-    var att = data().att, hw = data().hw, star = data().star;
-    var rows = [], A = 0, L = 0, P = 0, HN = 0, SP = 0;
-    Object.keys(att).forEach(function (d) { var v = att[d][st.id]; if (v) { rows.push(d); if (v === "A") A++; else if (v === "L") L++; else P++; } });
-    Object.keys(hw).forEach(function (d) { if (hw[d][st.id] === "N") HN++; if (rows.indexOf(d) < 0 && hw[d][st.id]) rows.push(d); });
-    Object.keys(star).forEach(function (d) { if (star[d][st.id] === "+") SP++; if (rows.indexOf(d) < 0 && star[d][st.id]) rows.push(d); });
+    var att = data().att, hw = data().hw, star = data().star, g = data().gById[st.g];
+    var o = studentStats(st.id), rows = [];
+    [att, hw, star].forEach(function (src) { Object.keys(src).forEach(function (d) { if (src[d][st.id] && rows.indexOf(d) < 0) rows.push(d); }); });
     rows.sort().reverse();
-    var h = sheetHead(esc(st.name), esc((data().gById[st.g] || {}).name || ""));
+    // Rank in the group by points, and an overall picture from attendance + homework + points
+    var gst = groupStats(st.g), mates = Object.keys(gst).sort(function (x, y) { return gst[y].pts - gst[x].pts; });
+    var rank = mates.indexOf(st.id) + 1, maxPts = mates.length ? Math.max(1, gst[mates[0]].pts) : 1;
+    var parts = [o.attPct, o.hwPct, o.S + o.Pl + o.M ? Math.max(0, Math.round(o.pts / maxPts * 100)) : null].filter(function (x) { return x != null; });
+    var score = parts.length ? Math.round(parts.reduce(function (x, y) { return x + y; }, 0) / parts.length) : null;
+    var verdict = score == null ? ["—", ""] : score >= 85 ? ["Shkëlqyeshëm", "ok"] : score >= 70 ? ["Shumë mirë", "ok"] : score >= 55 ? ["Mirë", "keep"] : ["Ka nevojë për ndihmë", "bad"];
+    // Last 4 weeks vs the 4 weeks before (points)
+    var cut = ymd(addDays(now(), -28)), cut2 = ymd(addDays(now(), -56)), p4 = 0, p8 = 0;
+    o.last.forEach(function (x) { var m = MARKS[x.v]; if (!m) return; if (x.d >= cut) p4 += m.pts; else if (x.d >= cut2) p8 += m.pts; });
+    function barRow(label, pct, txt) {
+      return '<div class="pf-row"><span class="pf-l">' + label + '</span><span class="bar pf-bar"><i style="width:' + (pct == null ? 0 : pct) + '%"></i></span><span class="pf-v">' + txt + "</span></div>";
+    }
+    var h = sheetHead(esc(st.name), esc(g ? groupIcon(g) + " " + g.name : ""));
     h += '<div class="sheet-body">';
+    h += '<div class="card pf"><div class="row between"><b>📈 Performanca</b><span class="chip pf-' + verdict[1] + '">' + esc(verdict[0]) + (score != null ? " · " + score + "%" : "") + "</span></div>" +
+      barRow("Prezenca", o.attPct, o.attPct == null ? "—" : o.attPct + "%") +
+      barRow("Detyrat", o.hwPct, o.hwPct == null ? "—" : o.hwPct + "%") +
+      barRow("Pikët", o.S + o.Pl + o.M ? Math.max(0, Math.round(o.pts / maxPts * 100)) : null, o.pts + " p") +
+      '<div class="facts" style="grid-template-columns:repeat(3,1fr)">' +
+      '<div class="fact"><span>Prezent / vonë</span><b>' + o.P + " / " + o.L + '</b></div><div class="fact"><span>Mungesa</span><b>' + o.A + "</b></div>" +
+      '<div class="fact"><span>DSh ✓ / ✗</span><b>' + o.Y + " / " + o.N + "</b></div>" +
+      '<div class="fact"><span>★ · + · −</span><b>' + o.S + " · " + o.Pl + " · " + o.M + '</b></div><div class="fact"><span>Pikë gjithsej</span><b>' + o.pts + "</b></div>" +
+      '<div class="fact"><span>Vendi në grup</span><b>' + (o.S + o.Pl + o.M ? rank + " / " + mates.length : "—") + "</b></div></div>" +
+      '<p class="small muted" style="margin-top:8px">4 javët e fundit: <b>' + p4 + " p</b>" + (p8 || p4 ? " · 4 javët para tyre: " + p8 + " p " + (p4 > p8 ? "↗" : p4 < p8 ? "↘" : "→") : "") + " · ★ = 5, + = 3, − = −2</p></div>";
     h += '<label class="field"><span>Emri</span><input class="input" data-in="stuName" data-s="' + esc(st.id) + '" value="' + esc(st.name) + '"></label>';
     h += '<label class="field"><span>Shënim</span><textarea class="input" rows="3" data-in="stuNote" data-s="' + esc(st.id) + '" placeholder="p.sh. prindi, niveli, çfarë të përsërisë…">' + esc(st.note) + "</textarea></label>";
-    h += '<label class="field"><span>Grupi</span><select class="input" data-in="stuGroup" data-s="' + esc(st.id) + '">' + data().groups.map(function (g) { return '<option value="' + esc(g.id) + '"' + (g.id === st.g ? " selected" : "") + ">" + esc(groupIcon(g) + " " + g.name) + "</option>"; }).join("") + "</select></label>";
-    h += '<div class="facts" style="grid-template-columns:repeat(4,1fr)"><div class="fact"><span>Prezent</span><b>' + P + '</b></div><div class="fact"><span>Vonë</span><b>' + L + '</b></div><div class="fact"><span>Mungesa</span><b>' + A + '</b></div><div class="fact"><span>DSh ✗</span><b>' + HN + "</b></div></div>";
+    h += '<label class="field"><span>Grupi</span><select class="input" data-in="stuGroup" data-s="' + esc(st.id) + '">' + data().groups.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === st.g ? " selected" : "") + ">" + esc(groupIcon(x) + " " + x.name) + "</option>"; }).join("") + "</select></label>";
     if (rows.length) {
-      h += '<div class="section-title">Historiku</div><ul class="hist">' + rows.slice(0, 30).map(function (d) {
-        var a = (att[d] || {})[st.id], w = (hw[d] || {})[st.id], p = (star[d] || {})[st.id];
-        return "<li><span>" + esc(fmtDayDate(d)) + "</span><span>" + ({ P: "✓ prezent", L: "⏰ vonë", A: "✗ mungon" }[a] || "") + (w ? " · DSh " + (w === "Y" ? "✓" : "✗") : "") + (p ? " · " + (p === "+" ? "★" : "−") : "") + "</span></li>";
+      h += '<div class="section-title">Historiku</div><ul class="hist">' + rows.slice(0, 40).map(function (d) {
+        var a = (att[d] || {})[st.id], w = (hw[d] || {})[st.id], m = MARKS[(star[d] || {})[st.id]];
+        return "<li><span>" + esc(fmtDayDate(d)) + "</span><span>" + ({ P: "✓ prezent", L: "⏰ vonë", A: "✗ mungon" }[a] || "") + (w ? " · DSh " + (w === "Y" ? "✓" : "✗") : "") + (m ? " · " + m.ic + " " + (m.pts > 0 ? "+" + m.pts : "−" + Math.abs(m.pts)) : "") + "</span></li>";
       }).join("") + "</ul>";
     }
     h += '<div class="center" style="margin-top:16px"><button type="button" class="btn btn-danger btn-sm" data-a="delStudent" data-s="' + esc(st.id) + '">Fshi nxënësin</button></div>';
@@ -1978,8 +2207,9 @@
   }
 
   function groupForm(g) {
-    if (!g) return { name: "", short: "", book: "", total: 56, done: 0, units: 15, perWeek: 2, color: data().groups.length % COLORS.length, icon: freeIcon(null), schedule: [{ d: 1, s: "17:00", e: "18:00" }], students: "" };
-    return { name: g.name, short: g.raw.short || "", book: g.book, pages: g.raw.pages || "", wbPages: g.wbPages || "", level: g.level || "", icon: groupIcon(g), total: g.total, done: g.done, units: g.units, perWeek: g.perWeek, color: g.colorIdx, schedule: JSON.parse(JSON.stringify(g.schedule)) };
+    if (!g) return { name: "", short: "", book: "", total: 56, done: 0, units: 15, perWeek: 2, color: data().groups.length % COLORS.length, icon: freeIcon(null), schedule: [{ d: 1, s: "17:00", e: "18:00" }, { d: 3, s: "17:00", e: "18:00" }], students: "", start: todayStr(), months: "", deadline: "", testAt: "" };
+    return { name: g.name, short: g.raw.short || "", book: g.book, pages: g.raw.pages || "", wbPages: g.wbPages || "", level: g.level || "", icon: groupIcon(g), total: g.total, done: g.done, units: g.units, perWeek: g.perWeek, color: g.colorIdx, schedule: JSON.parse(JSON.stringify(g.schedule)),
+      start: g.start, months: g.raw.months || "", deadline: g.deadline, testAt: g.testAt };
   }
 
   function addStudentsFrom(gid, text) {
@@ -2182,8 +2412,16 @@
     },
     star: function (el) {
       var k = "p~" + ui.sheet.date + "~" + el.getAttribute("data-s");
-      var next = { "": "+", "+": "-", "-": "" }[getK(k) || ""];
+      var next = MARK_NEXT[getK(k) || ""];
       if (next) setK(k, next); else delK(k);
+    },
+    testDone: function (el) {
+      var g = data().gById[el.getAttribute("data-g")], u = el.getAttribute("data-u");
+      if (!g) return;
+      var t = JSON.parse(JSON.stringify(g.tests || {}));
+      if (t[u]) delete t[u]; else t[u] = todayStr();
+      updGroup(g.id, { tests: t });
+      toast(t[u] ? "Testi u shënua si i bërë ✓" : "Shënimi i testit u hoq");
     },
 
     newGroup: function () { openSheet({ type: "group", g: null, form: groupForm(null) }); ui.focus = "#gf-name"; render(true); },
@@ -2216,6 +2454,10 @@
         wbPages: Math.max(0, parseInt(f.wbPages, 10) || 0),
         level: String(f.level || "").trim(),
         icon: iconClean(f.icon),
+        start: isYmd(f.start) ? f.start : "",
+        months: Math.max(0, Math.min(36, parseInt(f.months, 10) || 0)),
+        deadline: isYmd(f.deadline) ? f.deadline : "",
+        testAt: String(f.testAt || "").trim(),
       };
       if (bookInfo(obj.book)) obj.units = bookInfo(obj.book).units;
       if (s.g) {
@@ -2470,6 +2712,7 @@
       if (sl) sl[el.getAttribute("data-k")] = el.getAttribute("data-k") === "d" ? +el.value : el.value;
       return;
     }
+    if (el.hasAttribute("data-gf") && ui.sheet && ui.sheet.type === "group" && /^(start|months|deadline|testAt|units)$/.test(el.getAttribute("data-gf"))) { ui.sheet.form[el.getAttribute("data-gf")] = el.value; render(true); return; }
     if (el.getAttribute("data-in")) saveInline(el);
   });
   document.addEventListener("keydown", function (e) {
@@ -2550,6 +2793,9 @@
     }).catch(function () { });
   }
 
+
+  // v5 styles live here, so the page itself (index.html, style.css) never needs to change
+  (function () { var st = document.createElement("style"); st.id = "cb-v5-css"; st.textContent = "\n/* v5: deadlines, tests, marks, student profile */\n.crow .nm { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }\n.crow .nm .pts { color: var(--muted); font-weight: 700; font-size: .72rem; margin-left: 4px; }\n.star-p { background: var(--ok-soft); color: var(--ok); border-color: transparent; font-size: 1.15rem; }\n.deadline { margin-top: 4px; }\n.deadline.late, td.late { color: var(--bad); font-weight: 700; }\n.fact-late b { color: var(--bad); }\n.test-line { margin-top: 6px; font-size: .92rem; background: var(--warn-soft); border-radius: 10px; padding: 6px 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }\n.test-line.due { background: var(--brand-soft); border: 1px solid var(--brand); }\n.test-line .btn { min-height: 30px; padding: 4px 10px; }\n.tests { list-style: none; margin: 10px 0 0; padding: 0; }\n.tests li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }\n.tests li:first-child { border-top: 0; }\n.tests li small { display: block; color: var(--muted); font-size: .8rem; }\n.tests li.t-done b { color: var(--muted); text-decoration: line-through; }\n.tests li.t-due { background: var(--brand-soft); border-radius: 10px; padding-left: 8px; padding-right: 4px; }\n.tests li.t-missed b { color: var(--warn); }\n.reg-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }\n.reg-box > span { margin-bottom: 8px !important; }\n.reg-box .field { margin-bottom: 8px; }\n.pf { padding: 12px; margin-bottom: 14px; box-shadow: none; }\n.pf-row { display: grid; grid-template-columns: 78px 1fr 56px; align-items: center; gap: 8px; margin-top: 8px; font-size: .9rem; }\n.pf-bar { margin: 0 !important; }\n.pf-v { text-align: right; font-weight: 700; }\n.pf-ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }\n.pf-keep { background: var(--warn-soft); color: var(--warn); border-color: transparent; }\n.pf-bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }\n"; document.head.appendChild(st); })();
   // ——————————————————— Boot ———————————————————
   try { var savedTab = sessionStorage.getItem("cb.tab"); if (savedTab) ui.tab = savedTab; } catch (e) { }
   render(true);
@@ -2577,5 +2823,5 @@
   setTimeout(autoSnapshot, Sync.cfg() ? 20000 : 3000);
 
   // For debugging/tests
-  window.__classboard = { version: VERSION, kv: function () { return kv; }, meta: function () { return meta; }, sync: Sync, data: data, render: render };
+  window.__classboard = { version: VERSION, targetInfo: targetInfo, regEnd: regEnd, testsOf: testsOf, pageInfo: pageInfo, kv: function () { return kv; }, meta: function () { return meta; }, sync: Sync, data: data, render: render };
 })();

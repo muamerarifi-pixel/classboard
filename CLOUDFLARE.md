@@ -1,5 +1,7 @@
 # Classboard on Cloudflare Workers
 
+> Setup is done: the worker deploys automatically from this repo's `main` branch. See README.md for day-to-day use. This file records how the app moved from Vercel.
+
 This repo is Classboard, moved from Vercel (classboard-v41.vercel.app) to Cloudflare Workers.
 
 - `public/` holds the app's files, served by Workers Static Assets (free, no request limit).
