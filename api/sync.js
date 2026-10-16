@@ -48,23 +48,23 @@ async function query(text, params) {
   return Array.isArray(res) ? res : (res && res.rows) || [];
 }
 
+// Only a plain flag is shared between requests. On Cloudflare a promise started by one request
+// must not be awaited by another: if that request is cancelled, the promise never settles and
+// every later sync in the same worker hangs.
 async function ensureSchema() {
-  if (!ready) {
-    ready = (async () => {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await query("CREATE TABLE IF NOT EXISTS cb_kv (space text NOT NULL, k text NOT NULL, v jsonb, t bigint NOT NULL, d text, seq bigint NOT NULL, PRIMARY KEY (space, k))");
-          await query("CREATE SEQUENCE IF NOT EXISTS cb_seq");
-          await query("CREATE INDEX IF NOT EXISTS cb_kv_space_seq ON cb_kv (space, seq)");
-          return;
-        } catch (e) {
-          if (attempt === 2) throw e; // concurrent first-time setup can race; retry
-          await new Promise((r) => setTimeout(r, 150));
-        }
-      }
-    })().catch((e) => { ready = null; throw e; });
+  if (ready) return;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await query("CREATE TABLE IF NOT EXISTS cb_kv (space text NOT NULL, k text NOT NULL, v jsonb, t bigint NOT NULL, d text, seq bigint NOT NULL, PRIMARY KEY (space, k))");
+      await query("CREATE SEQUENCE IF NOT EXISTS cb_seq");
+      await query("CREATE INDEX IF NOT EXISTS cb_kv_space_seq ON cb_kv (space, seq)");
+      ready = true;
+      return;
+    } catch (e) {
+      if (attempt === 2) throw e; // concurrent first-time setup can race; retry
+      await new Promise((r) => setTimeout(r, 150));
+    }
   }
-  return ready;
 }
 
 // ——— Auth ———
