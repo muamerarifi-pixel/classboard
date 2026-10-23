@@ -518,3 +518,52 @@ details.fix summary, details.more-opt summary { cursor: pointer; color: var(--mu
 .icons button.on { border-color: var(--brand); background: var(--brand-soft); }
 .icons button.taken { opacity: .35; }
 .icon-own { max-width: 260px; }
+
+/* ——— v6: layout — the PC uses its width, the phone stays one clean column ——— */
+.gd-col > * + * { margin-top: 12px; }
+.gd-col + .gd-col { margin-top: 12px; }
+/* students: compact rows, a quiet delete button (red only when you aim at it) */
+.students li { padding: 1px 0; gap: 6px; }
+.stu-name { padding: 9px 0; }
+.stu-name small { display: block; font-size: .82rem; margin-top: 1px; }
+.students .icon-btn, .hol-list .icon-btn { width: 34px; height: 34px; border-color: transparent; background: transparent; color: var(--soft); }
+.students .icon-btn svg, .hol-list .icon-btn svg { width: 16px; height: 16px; }
+.students .icon-btn:active, .hol-list .icon-btn:active { color: var(--bad); background: var(--bad-soft); }
+@media (hover: hover) { .students .icon-btn:hover, .hol-list .icon-btn:hover { color: var(--bad); background: var(--bad-soft); } }
+.num-badge { width: 20px; }
+/* attendance: "not marked yet" is a clear empty circle */
+.att:not(.att-P):not(.att-L):not(.att-A) { font-size: 0; display: inline-grid; place-items: center; }
+.att:not(.att-P):not(.att-L):not(.att-A)::after { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--soft); }
+/* phone tab bar: the active tab gets a soft pill behind its icon */
+.tabbar button svg { transition: background .15s; }
+.tabbar button.on svg { width: 54px; height: 30px; padding: 4px 16px; border-radius: 999px; background: var(--brand-soft); }
+
+@media (min-width: 1000px) {
+  body { padding-bottom: 32px; }
+  .topbar-inner, .main { max-width: 1180px; }
+  .topbar-inner { height: 60px; padding: 0 24px; }
+  .main { padding: 24px 24px 40px; }
+  /* the tabs move up into the dark top bar */
+  .tabbar { top: var(--safe-t); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); z-index: 25; height: 60px; padding: 0;
+    align-items: center; gap: 4px; background: transparent; border: 0; }
+  .tabbar button { flex: none; max-width: none; flex-direction: row; gap: 8px; height: 40px; padding: 0 16px; border-radius: 12px; font-size: .9rem; color: #94a3b8; }
+  .tabbar button svg, .tabbar button.on svg { width: 18px; height: 18px; padding: 0; background: none; }
+  .tabbar button.on { color: #fff; background: rgba(255,255,255,.12); }
+  .toast-root { bottom: 24px; }
+  /* Sot: lessons side by side */
+  .v-today { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 16px; align-items: start; }
+  .v-today > * + * { margin-top: 0; }
+  .v-today > :not(.lesson) { grid-column: 1 / -1; }
+  /* Grupet: cards in a grid */
+  .v-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; align-items: start; }
+  .v-groups > * + * { margin-top: 0; }
+  .v-groups > :not(.group-card) { grid-column: 1 / -1; }
+  /* a group: progress, tests and units on the left — schedule and students on the right */
+  .gd-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .gd-col + .gd-col { margin-top: 0; }
+  /* Më shumë: two columns of settings */
+  .set-list { display: block; columns: 2; column-gap: 14px; }
+  .set-list > * { break-inside: avoid; margin: 0 0 14px; }
+  .set-list > h1 { column-span: all; }
+}
+@media (hover: hover) and (min-width: 1000px) { .tabbar button:not(.on):hover { color: #e2e8f0; background: rgba(255,255,255,.06); } }

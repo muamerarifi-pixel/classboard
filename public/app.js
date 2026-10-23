@@ -1027,7 +1027,7 @@
     var n = now(), date = ymd(n), dow = n.getDay();
     var hol = holidayOn(date);
     var slots = hol ? [] : todaysSlots(date);
-    var h = '<div class="stack">';
+    var h = '<div class="stack v-today">';
     if (!Sync.cfg()) h += '<button type="button" class="card sync-warn" data-a="tab" data-tab="more"><b>⚠️ Kjo pajisje nuk sinkronizohet</b><span class="small">Ndryshimet këtu nuk shihen në pajisjet e tjera. Prekni këtu dhe shkruani kodin e klasës.</span></button>';
     h += '<div class="hero"><div class="day">' + esc(DAY_FULL[dow]) + '</div><div class="date">' + esc(fmtLong(n)) + "</div>";
     if (slots.length) {
@@ -1135,7 +1135,7 @@
   }
   function viewGroups() {
     var T = totals();
-    var h = '<div class="stack">';
+    var h = '<div class="stack v-groups">';
     h += '<div class="row between"><h1 style="font-size:1.4rem">Grupet</h1><button type="button" class="btn btn-primary" data-a="newGroup">+ Grup i ri</button></div>';
     h += '<div class="summary"><div class="kpi"><b>' + T.groups + '</b><span>Grupe</span></div><div class="kpi"><b>' + T.pct + '%</b><span>Progresi</span></div><div class="kpi"><b>' + T.left + "</b><span>Mësime mbetur</span></div></div>";
     if (!data().groups.length) h += '<div class="card empty"><div class="big">📚</div><b>Nuk ka grupe</b>Shtypni “+ Grup i ri” për të filluar.</div>';
@@ -1165,12 +1165,13 @@
   function viewGroup(g) {
     var f = forecast(g);
     var stu = studentsOf(g.id);
-    var h = '<div class="stack">';
+    var h = '<div class="stack v-group">';
     h += '<button type="button" class="back" data-a="back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Kthehu</button>';
     h += '<div class="gd-head" style="--gc:' + g.color + '"><div class="grow"><h1><span class="gdot"></span>' + gi(g) + esc(g.name) + " " + levelChip(g) + '</h1><div class="muted">' + esc(bookText(g.book)) + (levelText(g) ? " · niveli " + esc(levelText(g)) : "") + '</div></div>' +
       '<button type="button" class="btn btn-sm" data-a="editGroup" data-g="' + esc(g.id) + '">✎ Ndrysho</button></div>' +
       '<div class="gd-actions"><button type="button" class="btn btn-sm btn-primary" data-a="parents" data-g="' + esc(g.id) + '">💬 Raport për prindërit</button><button type="button" class="btn btn-sm" data-a="report" data-g="' + esc(g.id) + '">📄 Raport PDF</button></div>';
 
+    h += '<div class="gd-cols"><div class="gd-col">';
     // Progress — one card: where you are, what comes next, when you finish
     var pi = f.pi, pl = plannedLesson(g), nu = nextUnit(g);
     h += '<div class="card" style="--gc:' + g.color + '"><div class="row between"><h2 style="margin:0">Progresi</h2><span class="chip pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></div>";
@@ -1214,6 +1215,7 @@
     } else h += '<p class="small muted">Shtoni përmbajtjen e librit që raportet të tregojnë temat.</p>';
     h += '<button type="button" class="btn btn-sm btn-soft" style="margin-top:8px" data-a="contents" data-g="' + esc(g.id) + '">✎ Ndrysho përmbajtjen</button></details>';
 
+    h += '</div><div class="gd-col">';
     // Schedule + class
     h += '<div class="card"><div class="row between"><h2 style="margin:0">Orari</h2><button type="button" class="btn btn-sm btn-soft" data-a="openClass" data-g="' + esc(g.id) + '" data-date="' + todayStr() + '">👥 Prezenca</button></div><div class="slots" style="margin-top:10px">' +
       (g.schedule.length ? g.schedule.map(function (s) { return '<span class="slot">' + DAY_SHORT[s.d] + " " + esc(s.s) + "–" + esc(s.e) + "</span>"; }).join("") : '<span class="muted">Pa orar — shtoni te “Ndrysho”.</span>') +
@@ -1236,6 +1238,7 @@
     }
     h += "</div>";
 
+    h += '</div></div>';
     h += '<div class="center" style="padding:8px 0 4px"><button type="button" class="btn btn-danger btn-sm" data-a="delGroup" data-g="' + esc(g.id) + '">Fshi grupin</button></div>';
     h += "</div>";
     return h;
