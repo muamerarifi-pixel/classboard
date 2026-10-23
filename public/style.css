@@ -567,3 +567,10 @@ details.fix summary, details.more-opt summary { cursor: pointer; color: var(--mu
   .set-list > h1 { column-span: all; }
 }
 @media (hover: hover) and (min-width: 1000px) { .tabbar button:not(.on):hover { color: #e2e8f0; background: rgba(255,255,255,.06); } }
+
+/* ——— v6.1: progress bars show the pace, not the group colour ——— */
+.bar.pb-speed i { background: var(--bad); }
+.bar.pb-keep i { background: #f59e0b; }
+.bar.pb-ease i { background: var(--ok); }
+.bar.pb-done i { background: var(--brand); }
+.colors { gap: 10px; }

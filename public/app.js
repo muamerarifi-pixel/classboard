@@ -19,7 +19,7 @@
   var DAY_SHORT = ["Die", "Hën", "Mar", "Mër", "Enj", "Pre", "Sht"];
   var MONTHS = ["janar", "shkurt", "mars", "prill", "maj", "qershor", "korrik", "gusht", "shtator", "tetor", "nëntor", "dhjetor"];
   var MONTHS_S = ["jan", "shk", "mar", "pri", "maj", "qer", "kor", "gus", "sht", "tet", "nën", "dhj"];
-  var COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#8b5cf6", "#14b8a6"];
+  var COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#8b5cf6", "#14b8a6", "#f97316", "#84cc16", "#06b6d4", "#2563eb", "#d946ef", "#f43f5e", "#ca8a04", "#16a34a", "#92400e", "#475569"]; // new colours only at the end: saved groups keep theirs
 
   // Books the app knows: edition, CEFR level (with the matching Cambridge exam), last SB page of the course.
   var BOOKS = [
@@ -1110,7 +1110,7 @@
       if (g.hw && g.hw.d === date) h += '<div class="plan-line">📓 Detyrë për herën tjetër: <b>' + (g.hw.p ? "WB f. " + esc(g.hw.p) : "pa detyrë") + "</b></div>";
     }
     var f = forecast(g);
-    if (f.pi) h += '<div class="mini-prog"><span class="bar"><i style="width:' + f.pi.pct + '%"></i></span><span class="tiny muted">SB f. ' + f.pi.cur + "/" + f.pi.total + " · " + f.pi.pct + '% · <span class="pace-t pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></span></div>";
+    if (f.pi) h += '<div class="mini-prog"><span class="bar pb-' + f.pace + '"><i style="width:' + f.pi.pct + '%"></i></span><span class="tiny muted">SB f. ' + f.pi.cur + "/" + f.pi.total + " · " + f.pi.pct + '% · <span class="pace-t pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></span></div>";
     else h += '<div class="lesson-next">Mësimi ' + lessonNo + " / " + g.total + "</div>";
     return h;
   }
@@ -1123,7 +1123,7 @@
       return '<button type="button" class="mini" data-a="openGroup" data-g="' + esc(g.id) + '" style="--gc:' + g.color + '">' +
         '<span><span class="gdot"></span>' + gi(g) + '<b>' + esc(g.short) + '</b> <span class="muted small">' + (f.pi ? "f. " + f.pi.cur + "/" + f.pi.total : g.done + "/" + g.total) + "</span></span>" +
         '<span class="chip pace-' + f.pace + '">' + esc(f.paceLabel) + "</span>" +
-        '<span class="bar"><i style="width:' + f.pct + '%"></i></span></button>';
+        '<span class="bar pb-' + f.pace + '"><i style="width:' + f.pct + '%"></i></span></button>';
     }).join("");
   }
 
@@ -1145,7 +1145,7 @@
       h += '<button type="button" class="card group-card" data-a="openGroup" data-g="' + esc(g.id) + '" style="--gc:' + g.color + '">' +
         '<div class="row between"><h3>' + gi(g) + esc(g.name) + " " + levelChip(g) + '</h3><span class="chip pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></div>" +
         '<div class="muted small">' + esc(bookText(g.book)) + " · " + n + " nxënës · " + esc(scheduleText(g)) + "</div>" +
-        '<div class="bar"><i style="width:' + f.pct + '%"></i></div>' +
+        '<div class="bar pb-' + f.pace + '"><i style="width:' + f.pct + '%"></i></div>' +
         '<div class="row between small"><span>' + (f.pi ? "SB <b>" + f.pi.cur + "</b>/" + f.pi.total + " f. · " : "<b>" + g.done + "</b>/" + g.total + " · ") + f.rem + " mësime mbetur</span><span class=\"muted\">" + (f.rem ? "Mbaron ~ " + fmtShort(f.date) : "Përfunduar ✓") + "</span></div>" +
         (f.tg ? '<div class="small deadline' + (f.late ? " late" : "") + '">🎯 Afati: <b>' + esc(fmtShort(f.tg.date)) + "</b> <span class=\"muted\">(" + esc(deadlineSrc(f.tg, g)) + ")</span>" + (f.rem && !f.tg.past ? " · " + f.tg.slots + " mësime deri atëherë" : "") + (f.late ? " · ⚠️ vonohet" : "") + "</div>" : "") +
         (testNow(g) ? '<div class="small">📝 ' + esc(testNow(g).title) + (testNow(g).state === "due" ? " — tani" : " — së shpejti") + "</div>" : "") +
@@ -1177,14 +1177,14 @@
     h += '<div class="card" style="--gc:' + g.color + '"><div class="row between"><h2 style="margin:0">Progresi</h2><span class="chip pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></div>";
     if (pi) {
       h += '<div class="big-prog"><b>' + pi.pct + '%</b><span>SB faqja ' + pi.cur + " nga " + pi.total + "</span></div>" +
-        '<div class="bar"><i style="width:' + pi.pct + '%"></i></div>';
+        '<div class="bar pb-' + f.pace + '"><i style="width:' + pi.pct + '%"></i></div>';
       if (pi.left > 0) {
         if (nu) h += '<p class="lesson-unit" style="margin-top:10px">📖 Tani: ' + esc(unitLabel(nu)) + "</p>";
         if (pl.t) h += '<div class="target-line">🎯 Mësimi i radhës: <b>SB f. ' + rangeText(pl.t.a, pl.t.b) + "</b>" + (pl.hw ? " · DSh WB f. " + esc(pl.hw) : "") + "</div>";
         h += paceNote(pi);
       } else h += '<p class="pace-good">🎉 Libri përfundoi.</p>';
     } else {
-      h += '<div class="bar"><i style="width:' + f.pct + '%"></i></div><p class="muted small" style="margin-top:6px">Shkruani më poshtë faqen e SB ku jeni — pastaj progresi dhe faqet e çdo mësimi llogariten vetë.</p>';
+      h += '<div class="bar pb-' + f.pace + '"><i style="width:' + f.pct + '%"></i></div><p class="muted small" style="margin-top:6px">Shkruani më poshtë faqen e SB ku jeni — pastaj progresi dhe faqet e çdo mësimi llogariten vetë.</p>';
     }
     h += '<div class="facts">' +
       '<div class="fact"><span>Mësime</span><b>' + g.done + " / " + g.total + "</b></div>" +
@@ -1286,7 +1286,7 @@
       var g = x.g, f = x.f;
       h += '<button type="button" class="card group-card" data-a="openGroup" data-g="' + esc(g.id) + '" style="--gc:' + g.color + '">' +
         '<div class="row between"><h3>' + gi(g) + esc(g.name) + " " + levelChip(g) + '</h3><span class="chip pace-' + f.pace + '">' + esc(f.paceLabel) + "</span></div>" +
-        '<div class="bar"><i style="width:' + f.pct + '%"></i></div>' +
+        '<div class="bar pb-' + f.pace + '"><i style="width:' + f.pct + '%"></i></div>' +
         '<div class="facts" style="grid-template-columns:repeat(3,1fr);margin-top:6px">' +
         '<div class="fact"><span>Mbetur</span><b>' + f.rem + "</b></div>" +
         '<div class="fact"><span>Javë</span><b>' + f.weeks + "</b></div>" +

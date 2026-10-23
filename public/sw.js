@@ -1,7 +1,7 @@
 /* Classboard service worker — offline app shell.
  * Bump CACHE when you change any file so phones pick up the new version.
  * Only same-origin files are cached; sync requests (/api/) are never touched. */
-var CACHE = "classboard-v6-cf";
+var CACHE = "classboard-v6-1-cf";
 var ASSETS = [
   "./",
   "./index.html",
