@@ -1900,6 +1900,12 @@
       return '<li><button type="button" data-a="openGroup" data-g="' + esc(g.id) + '" style="--gc:' + g.color + '"><span class="gdot"></span><span class="grow">' + gi(g) + '<b>' + esc(g.name) + "</b><small>" + esc(bookText(g.book)) + ((bookInfo(g.book) || {}).exam && !g.level ? " · Cambridge " + esc(bookInfo(g.book).exam) : "") + "</small></span>" + (levelOf(g) ? '<span class="lvl lvl-big">' + esc(levelOf(g)) + "</span>" : '<span class="muted small">—</span>') + "</button></li>";
     }).join("") + '</ul><p class="muted tiny" style="margin-top:6px">Niveli vjen nga libri (Oxford). Mund ta ndryshoni te grupi → Ndrysho → Më shumë opsione.</p></div>';
 
+    // Theme (only on this device)
+    var th = (function () { try { return localStorage.getItem("cb_theme") || "auto"; } catch (e) { return "auto"; } })();
+    h += '<div class="card"><h2>🎨 Pamja</h2><div class="theme-seg">' + [["auto", "Auto"], ["light", "E çelët"], ["dark", "E errët"]].map(function (o) {
+      return '<button type="button" class="btn btn-sm' + (th === o[0] ? " on" : "") + '" data-a="theme" data-v="' + o[0] + '">' + o[1] + "</button>";
+    }).join("") + '</div><p class="muted tiny" style="margin-top:8px">Auto ndjek pamjen e telefonit (ditë/natë).</p></div>';
+
     // Sync
     h += '<div class="card"><h2>🔄 Sinkronizimi mes pajisjeve</h2>';
     h += '<div class="status-box ' + "st-" + Sync.S.status + '"><i class="dot"></i><span id="sync-status-line" class="small">' + esc(statusText()) + "</span></div>";
@@ -2519,6 +2525,13 @@
       if (!code) { ui.syncErr = "Shkruani kodin e plotë të klasës (12 shkronja/numra)."; render(true); return; }
       ui.syncErr = "";
       joinWith(code);
+    },
+    theme: function (el) {
+      var v = el && el.getAttribute("data-v");
+      try { if (v === "light" || v === "dark") localStorage.setItem("cb_theme", v); else localStorage.removeItem("cb_theme"); } catch (e) {}
+      var r = document.documentElement, m = document.querySelector('meta[name="color-scheme"]');
+      if (v === "light" || v === "dark") { r.dataset.theme = v; if (m) m.content = v; } else { delete r.dataset.theme; if (m) m.content = "light dark"; }
+      render();
     },
     shareLink: function () {
       var link = joinLink();
